@@ -135,6 +135,13 @@ label.lb{display:block;font-weight:800;font-size:16px;margin-block-end:6px}
 .hint{font-size:14px;color:var(--ink2);margin-block-start:6px}
 .welcome{text-align:center}
 .welcome .q{text-align:right}
+.need{display:inline-block;font-size:13px;font-weight:800;color:var(--sadu-ink);background:var(--sadu-soft);
+  border-radius:8px;padding:1px 8px;margin-inline-start:6px;vertical-align:middle}
+.opt{display:inline-block;font-size:13px;font-weight:700;color:var(--ink2);background:var(--bg);
+  border-radius:8px;padding:1px 8px;margin-inline-start:6px;vertical-align:middle}
+.leftn{font-size:14px;font-weight:700;color:var(--ink2);white-space:nowrap;flex:none}
+.skipnote{margin:8px 14px 0;padding:9px 12px;border-radius:12px;background:var(--bg);color:var(--ink2);
+  font-size:14px;line-height:1.5;max-width:760px;margin-inline:auto}
 .arrived{font-size:16px;font-weight:800;color:var(--palm-ink);background:var(--palm-soft);border-radius:12px;padding:10px 12px;margin:14px 0 0}
 .privacy{font-size:14px;line-height:1.6;color:var(--ink2);background:var(--bg);border-radius:12px;padding:10px 12px;margin:14px 0 0;text-align:start}
 .big-logo{height:40px;width:auto;margin-block:2px 22px}          /* توقيع لا صدارة: العنوان هو الأكبر */
@@ -176,9 +183,11 @@ ul.three b{color:var(--ink)}
   <div class="hintrow">
     <span class="netnote" id="netnote" hidden></span>
     <span class="saved" id="saved" hidden>حُفظ على جهازك</span>
+    <span class="leftn" id="leftn"></span>
   </div>
   <p class="keep" id="keep" hidden>الحفظ على المتصفّح لا يدوم طويلاً — انسخ إجاباتك احتياطاً.</p>
 </header>
+<p class="skipnote" id="skipnote" hidden></p>
 <div class="alarm" id="alarm" hidden></div>
 <div class="remind" id="remind" hidden></div>
 <textarea class="copyOut" id="copyOut" hidden spellcheck="false"></textarea>
@@ -367,6 +376,14 @@ const LESSONS = [];
 DATA.units.forEach(u => u.lessons.forEach(l => LESSONS.push(Object.assign({ unit:u.title, unitCode:u.code }, l))));
 const LAST = LESSONS.length + 1;                      /* 0 = تعريف · 1..n = دروس · LAST = إرسال */
 const ansOf = id => (S.ans[id] = S.ans[id] || {});
+/* الحكم وحده هو المطلوب: درس بحكم = مكتمل ولو خلا من الأسبوع وأصعب نقطة (قرار المؤسّس 13 سبتمبر ليلاً) */
+const lessonsLeft = () => LESSONS.filter(l => !isDone(l.id));
+const plural = n => n === 1 ? 'درس واحد' : n === 2 ? 'درسان' : n <= 10 ? AR(n) + ' دروس' : AR(n) + ' درساً';
+/* الاستئناف من أول درس بلا حكم لا من آخر درس زاره — يقطع دورة «يتصفّح ثم ينسى أين توقّف» */
+function firstUnanswered(){
+  const i = LESSONS.findIndex(l => !isDone(l.id));
+  return i < 0 ? LAST : i + 1;
+}
 const isDone = id => { const a = S.ans[id] || {}; return !!a.state; };
 const doneCount = () => LESSONS.filter(l => isDone(l.id)).length;
 
@@ -389,10 +406,18 @@ function render(){
   if (NAVDIR){ const c = $('#count'); c.classList.remove('bump'); void c.offsetWidth; c.classList.add('bump'); }
   NAVDIR = 0;
   $('#copyN').textContent = doneCount() ? '(' + AR(doneCount()) + ')' : '';
+  const nLeft = lessonsLeft().length, ln = $('#leftn');
+  if (ln){ ln.hidden = i === 0 || nLeft === 0; ln.textContent = 'متبقٍ: ' + plural(nLeft); }
   uiState();
 }
 let NAVDIR = 0;                     /* +1 التالي · −1 السابق · 0 بلا تنقّل */
 /* التمرير فوري لا سلس، ويُعاد بعد الرسم: تبدّل ارتفاع المحتوى كان يُرجِع الموضع (scroll anchoring) */
+let skipT = 0;
+function saySkip(msg){
+  const el = $('#skipnote'); if (!el) return;
+  el.textContent = msg; el.hidden = false;
+  clearTimeout(skipT); skipT = setTimeout(() => { el.hidden = true; }, 6000);
+}
 function toTop(){
   try { window.scrollTo({ top:0, left:0, behavior:'instant' }); } catch(e){ window.scrollTo(0, 0); }
   document.documentElement.scrollTop = 0; document.body.scrollTop = 0;
@@ -430,7 +455,7 @@ function lesson(l){
     <h3>الحقائق التي ستُبنى عليها الأسئلة</h3>
     ${l.ko.map(k => `<div class="ko"><span class="k">${esc(k[0])}</span><span>${esc(k[1])} ${k[2] !== 'موثّق' ? `<span class="tag q">${esc(k[2])}</span>` : ''}</span></div>`).join('')}
 
-    <div class="q"><b>١ · هل ما سبق صحيح؟</b>
+    <div class="q"><b>١ · هل ما سبق صحيح؟</b> <span class="need">مطلوب</span>
       <div class="pair">
         <button class="big ok" data-state="ok" aria-pressed="${a.state === 'ok'}">✓ صحيح</button>
         <button class="big fix" data-state="fix" aria-pressed="${a.state === 'fix'}">✎ يحتاج تعديل</button>
@@ -441,14 +466,14 @@ function lesson(l){
       </div>
     </div>
 
-    <div class="q"><b>٢ · في أي أسبوع تُدرّس هذا الدرس؟</b>
+    <div class="q"><b>٢ · في أي أسبوع تُدرّس هذا الدرس؟</b> <span class="opt">اختياري</span>
       <select id="week"><option value="">— اختر الأسبوع —</option>
         ${Array.from({ length: 16 }, (_, k) => `<option value="${k + 1}"${String(a.week) === String(k + 1) ? ' selected' : ''}>الأسبوع ${k + 1}</option>`).join('')}
       </select>
       <p class="hint">ترتيب الكتاب ليس ترتيب التدريس — الأسابيع تأتي منك.</p>
     </div>
 
-    <div class="q"><b>٣ · أصعب نقطة على الطلاب في هذا الدرس؟</b>
+    <div class="q"><b>٣ · أصعب نقطة على الطلاب في هذا الدرس؟</b> <span class="opt">اختياري</span>
       <input type="text" id="hard" value="${esc(a.hard || '')}" placeholder="اختياري — كلمة أو سطر">
       <p class="hint">اكتب عن الدرس لا عن طالب بعينه — لا نجمع شيئاً عن الطلاب.</p>
     </div>
@@ -461,13 +486,14 @@ function lesson(l){
     </div>`).join('')}`;
 }
 function outro(){
-  const done = doneCount(), left = LESSONS.filter(l => !isDone(l.id));
+  const done = doneCount(), left = lessonsLeft();
+  /* «انتهيت» لا تُقال قبل اكتمال الأحكام الـ٢٤ (قرار المؤسّس): الناقص يُسرد ويُقفَز إليه بضغطة */
   return `<div class="card">
-    <h1>تمّت المراجعة</h1>
-    <p class="sub">راجعت ${AR(done)} من ${AR(LESSONS.length)} درساً.</p>
-    ${left.length ? `<p class="sub" style="margin-block-end:4px">لم تُراجَع بعد — اضغط الدرس للعودة إليه:</p>
-       <div class="left">${left.map(l => `<button data-go="${LESSONS.indexOf(l) + 1}">${esc(l.unitCode)} ${AR(l.n)}</button>`).join('')}</div>`
-                  : `<p class="done-note">كل الدروس مُراجَعة — شكراً.</p>`}
+    <h1>${left.length ? 'بقي ' + plural(left.length) + ' بلا إجابة' : 'انتهيت ✓'}</h1>
+    <p class="sub">أجبت ${AR(done)} من ${AR(LESSONS.length)} درساً.</p>
+    ${left.length ? `<p class="sub" style="margin-block-end:4px">اضغط الدرس لتذهب إليه مباشرة:</p>
+       <div class="left">${left.map(l => `<button data-go="${LESSONS.indexOf(l) + 1}">${esc(l.unitCode)} ${AR(l.n)} · ${esc(l.title.slice(0, 22))}</button>`).join('')}</div>`
+                  : `<p class="done-note">كل الدروس الأربعة والعشرين أُجيبت — شكراً.</p>`}
     ${SYNC ? `<p class="arrived">✓ ${AR(done)} ${done === 1 ? 'إجابة وصلت' : 'إجابة وصلت'} إلى SHIFT — لا يلزمك إرسال شيء.</p>` : ''}
     <div style="margin-block-start:18px">
       <button class="send ${SYNC ? 'alt' : ''}" id="send">${SYNC ? 'أرسل نسخة لعبدالرحمن (اختياري)' : 'أرسل لعبدالرحمن'}</button>
@@ -566,7 +592,19 @@ document.addEventListener('pointerdown', e => {
 }, { passive:true });
 /* حالة التخزين تُفحص قبل أول حقل: التنبيه يسبق الكتابة لا يتبعها */
 setStorage(probeStorage(), 'التخزين محجوب على هذا المتصفّح');
-$('#next').onclick = () => { if (S.at === LAST) return toTop(); NAVDIR = 1; S.at++; save(); render(); };
+/* عند العودة: من أول درس بلا حكم (إلا أن يكون المعلّم في شاشة الترحيب أو أنهى الكلّ).
+   ويُحفظ القرار فوراً حتى لا يفترق ما تراه العين عمّا في التخزين. */
+if (S.at > 0 && S.at < LAST){ const f = firstUnanswered(); if (f !== S.at){ S.at = f; save(); } }
+$('#next').onclick = () => {
+  if (S.at === LAST) return toTop();
+  const cur = LESSONS[S.at - 1];
+  if (cur && !isDone(cur.id)){                       /* لا يُحبس التنقّل: المعلّم قد يتصفّح أو يتخطّى درساً لا يدرّسه */
+    const a = ansOf(cur.id); a.skipped = new Date().toISOString();   /* «لم يُجَب» لا فراغ */
+    saySkip('لم تختر بعد في «' + cur.title + '» — يمكنك العودة إليه لاحقاً.');
+    save(); queueRow(cur.id);
+  }
+  NAVDIR = 1; S.at++; save(); render();
+};
 $('#prev').onclick = () => { NAVDIR = -1; S.at--; save(); render(); };
 render();
 </script>
