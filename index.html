@@ -26,9 +26,27 @@
   --gold:#E0A83A; --gold-soft:#FBEBD2; --gold2:#B8842A; --clay:#D9A066;
   --shadow:0 6px 0 rgba(120,80,40,.22),0 12px 22px rgba(60,40,20,.18);
   --r:18px; --hit:52px;
+  /* حركة: رموز دليل الفن نفسها بقيمها (art bible §5) — 200ms وتسهيل واحد. لا قيم جديدة في هذه الصفحة. */
+  --d-pop:200ms; --ease-settle:cubic-bezier(.22,1,.36,1);
   --font:'Cairo','IBM Plex Sans Arabic',system-ui,sans-serif;
   --display:'Lalezar','Baloo Bhaijaan 2','Cairo',sans-serif;   /* حزمة «طين وسدو»: Lalezar للعناوين، Cairo للنصّ */
 }
+@media (prefers-reduced-motion:reduce){ :root{ --d-pop:1ms } }
+/* ثلاث إشارات للانتقال (قرار المؤسّس 13 سبتمبر ليلاً: «ينتقل الدرس ولا شيء يدلّ على ذلك»):
+   (1) تمرير فوري للأعلى — instant لا smooth، والسلاسة على الجوال تُقرأ بطئاً؛ و overflow-anchor:none
+       لأن مثبّت المرساة في المتصفّح كان يعيد الموضع بعد تبدّل ارتفاع المحتوى فيبطل scrollTo.
+   (2) دخول البطاقة من جهة التنقّل (RTL: «التالي» يدخل من اليسار) بـ--d-pop و--ease-settle.
+   (3) squash فوري على الزرّ الملموس — نفس منحنى feel-squash في المحركات. */
+html{overflow-anchor:none}
+@keyframes card-next{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:none}}
+@keyframes card-prev{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
+.slide-next{animation:card-next var(--d-pop) var(--ease-settle)}
+.slide-prev{animation:card-prev var(--d-pop) var(--ease-settle)}
+@keyframes feel-squash{0%{transform:scale(.97)}60%{transform:scale(1.04)}100%{transform:scale(1)}}
+button.press{animation:feel-squash var(--d-pop) var(--ease-settle)}
+@keyframes count-bump{0%{transform:scale(.94)}60%{transform:scale(1.07)}100%{transform:scale(1)}}
+.count.bump{animation:count-bump var(--d-pop) var(--ease-settle)}
+@media (prefers-reduced-motion:reduce){ .slide-next,.slide-prev,button.press,.count.bump{animation:none} }
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:17px;line-height:1.7;
   -webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent;overscroll-behavior-y:none}
@@ -49,7 +67,9 @@ header{position:sticky;top:0;z-index:9;background:var(--paper);padding:10px 14px
 .count{font-family:var(--display);font-weight:400;font-size:20px;font-variant-numeric:tabular-nums;white-space:nowrap;flex:none}
 .track{height:10px;background:var(--bg);border-radius:6px;margin-block-start:8px;overflow:hidden}
 .track i{display:block;height:100%;background:var(--palm);border-radius:6px;transition:width .25s ease}
-.saved{font-size:14px;color:var(--palm-ink);font-weight:700;opacity:0;transition:opacity .25s}
+.hintrow{position:relative;min-height:38px}
+.saved{position:absolute;inset:0;display:flex;align-items:center;background:var(--paper);
+  font-size:14px;color:var(--palm-ink);font-weight:700;opacity:0;transition:opacity .25s;pointer-events:none}
 /* لماذا هذه الجملة ظاهرة دائماً: سفاري يمسح تخزين الموقع بعد نحو أسبوع بلا فتح — معرفة تخصّ المعلّم لا تبقى عندنا (قرار المؤسّس) */
 .keep{font-size:14px;line-height:1.5;color:var(--ink2);opacity:.9;margin:4px 0 0}
 .saved.on{opacity:1}
@@ -80,7 +100,7 @@ header{position:sticky;top:0;z-index:9;background:var(--paper);padding:10px 14px
 .alarm .copyNow,.remind .copyNow{display:block;width:100%;min-height:48px;margin-block-start:10px;border:0;border-radius:14px;
   background:var(--ink);color:var(--paper);font-weight:800;font-size:16px;cursor:pointer;font-family:inherit}
 
-main{padding:14px 14px 0;max-width:760px;margin-inline:auto}
+main{padding:14px 14px 0;max-width:760px;margin-inline:auto;overflow-anchor:none}
 h1{font-family:var(--display);font-weight:400;font-size:30px;line-height:1.3;margin:0 0 6px}
 h2{font-family:var(--display);font-weight:400;font-size:24px;margin:22px 0 8px}
 h3{font-size:18px;margin:18px 0 6px;color:var(--ink2)}
@@ -148,8 +168,10 @@ ul.three b{color:var(--ink)}
   </div>
   <div class="track"><i id="bar" style="width:0"></i></div>
   <button class="copyBar" id="copyTop">⎘ انسخ إجاباتك <span class="n" id="copyN"></span></button>
-  <div class="saved" id="saved">حُفظ على جهازك</div>
-  <p class="keep">إجاباتك محفوظة على جهازك — إن طالت المدة، انسخها احتياطاً.</p>
+  <div class="hintrow">
+    <p class="keep" id="keep">إجاباتك محفوظة على جهازك — إن طالت المدة، انسخها احتياطاً.</p>
+    <div class="saved" id="saved">حُفظ على جهازك</div>
+  </div>
 </header>
 <div class="alarm" id="alarm" hidden></div>
 <div class="remind" id="remind" hidden></div>
@@ -251,7 +273,18 @@ function render(){
   const m = $('#app');
   m.innerHTML = i === 0 ? intro() : i === LAST ? outro() : lesson(LESSONS[i - 1]);
   wire(i);
-  window.scrollTo(0, 0);
+  const card = m.firstElementChild;
+  if (card && NAVDIR) card.classList.add(NAVDIR > 0 ? 'slide-next' : 'slide-prev');
+  toTop();
+  if (NAVDIR){ const c = $('#count'); c.classList.remove('bump'); void c.offsetWidth; c.classList.add('bump'); }
+  NAVDIR = 0;
+}
+let NAVDIR = 0;                     /* +1 التالي · −1 السابق · 0 بلا تنقّل */
+/* التمرير فوري لا سلس، ويُعاد بعد الرسم: تبدّل ارتفاع المحتوى كان يُرجِع الموضع (scroll anchoring) */
+function toTop(){
+  try { window.scrollTo({ top:0, left:0, behavior:'instant' }); } catch(e){ window.scrollTo(0, 0); }
+  document.documentElement.scrollTop = 0; document.body.scrollTop = 0;
+  requestAnimationFrame(() => { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; });
 }
 function intro(){
   /* شاشة الترحيب (قرار المؤسّس 13 سبتمبر): ثلاثة أسطر لا أكثر، وزرّ واحد، وحقل الاسم أولاً.
@@ -276,8 +309,8 @@ function intro(){
 function lesson(l){
   const a = S.ans[l.id] || {}, flag   /* قراءة بلا إنشاء: فتح الدرس وحده لا يكتب سجلاً */ = DATA.flagged.filter(f => f.lesson === l.id);
   return `<div class="card">
-    <p class="eyebrow">${esc(l.unit)} · الدرس ${AR(l.n)} · ص ${AR(l.pages[0])}–${AR(l.pages[1])}</p>
     <h1>${esc(l.title)}</h1>
+    <p class="eyebrow">${esc(l.unit)} · الدرس ${AR(l.n)} · ص ${AR(l.pages[0])}–${AR(l.pages[1])}</p>
     <h3>أهداف التعلّم كما استخرجناها</h3>
     <ol>${l.obj.map(o => `<li>${esc(o[0])} ${o[1] !== 'موثّق' ? `<span class="tag q">${esc(o[1])}</span>` : ''}</li>`).join('')}</ol>
     <h3>الحقائق التي ستُبنى عليها الأسئلة</h3>
@@ -355,7 +388,7 @@ function wire(i){
   if (i === 0){
     $('#who').oninput = e => { S.who = e.target.value; save(); };
     $('#school').oninput = e => { S.school = e.target.value; save(); };
-    $('#start').onclick = () => { S.at = 1; save(); render(); };
+    $('#start').onclick = () => { NAVDIR = 1; S.at = 1; save(); render(); };
     return;
   }
   if (i === LAST){
@@ -409,10 +442,16 @@ function copyText(t, note){
 $('#mark').innerHTML = (DATA.logo_bar ? `<img src="${DATA.logo_bar}" alt="SHIFT">` : '') + `<span class="brand">مراجعة الاجتماعيات — خامس</span>`;
 $('#foot').innerHTML = (DATA.logo_ui ? `<img src="${DATA.logo_ui}" alt="">` : '') + `<span>SHIFT — الكويت · ${AR(DATA.year)}</span>`;
 $('#copyTop').onclick = () => copyText(message(), 'نُسخت إجاباتك — الصقها في واتساب أو في ملاحظة.');
+/* تأكيد اللمس على أي زرّ: يبدأ عند pointerdown لا عند click — فيسبق تبدّل المحتوى */
+document.addEventListener('pointerdown', e => {
+  const b = e.target.closest && e.target.closest('button'); if (!b) return;
+  b.classList.remove('press'); void b.offsetWidth; b.classList.add('press');
+  b.addEventListener('animationend', () => b.classList.remove('press'), { once:true });
+}, { passive:true });
 /* حالة التخزين تُفحص قبل أول حقل: التنبيه يسبق الكتابة لا يتبعها */
 setStorage(probeStorage(), 'التخزين محجوب على هذا المتصفّح');
-$('#next').onclick = () => { if (S.at === LAST) return window.scrollTo(0, 0); S.at++; save(); render(); };
-$('#prev').onclick = () => { S.at--; save(); render(); };
+$('#next').onclick = () => { if (S.at === LAST) return toTop(); NAVDIR = 1; S.at++; save(); render(); };
+$('#prev').onclick = () => { NAVDIR = -1; S.at--; save(); render(); };
 render();
 </script>
 </html>
