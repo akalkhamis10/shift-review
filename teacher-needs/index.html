@@ -35,6 +35,16 @@
 }
 @media (prefers-reduced-motion:reduce){ :root{ --d-pop:1ms } }
 html{overflow-anchor:none}
+/* لا تمرير أفقي إطلاقاً — لا ساكناً ولا لحظياً (عيب المؤسّس 14 سبتمبر، شوهد على آيفون):
+   القياس أثبت تجاوزاً **لحظياً** 4–5px أثناء حركة دخول البطاقة (إزاحة 18px داخل حشوة 14px)
+   وأثناء squash الزرّ (scale 1.04 على زرّ عريض في الشريط الثابت). ويكفي إطار واحد متجاوز
+   أثناء السحب ليمسك سفاري التمرير الأفقي فتبدو الصفحة «طافية». `clip` لا ينشئ حاوية تمرير
+   فيبقى sticky يعمل، و`hidden` احتياط للمتصفّحات الأقدم. */
+html{overflow-x:hidden;overflow-x:clip;overscroll-behavior-x:none}
+body{overflow-x:hidden;overflow-x:clip;overscroll-behavior-x:none;max-width:100%}
+main{overflow-x:clip}
+.nav{overflow-x:clip}
+
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:17px;line-height:1.7;
@@ -92,11 +102,11 @@ input[type=text]:focus,select:focus,textarea:focus{outline:3px solid var(--palm)
 .opts button[aria-pressed="true"] .rankno{background:var(--palm);color:#fff}
 .opts button{display:flex;align-items:center;gap:10px}
 .opts.two{grid-template-columns:1fr 1fr}
-@keyframes card-next{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:none}}
-@keyframes card-prev{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
+@keyframes card-next{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
+@keyframes card-prev{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
 .slide-next{animation:card-next var(--d-pop) var(--ease-settle)}
 .slide-prev{animation:card-prev var(--d-pop) var(--ease-settle)}
-@keyframes feel-squash{0%{transform:scale(.97)}60%{transform:scale(1.04)}100%{transform:scale(1)}}
+@keyframes feel-squash{0%{transform:scale(.98)}60%{transform:scale(1.02)}100%{transform:scale(1)}}
 button.press{animation:feel-squash var(--d-pop) var(--ease-settle)}
 @keyframes count-bump{0%{transform:scale(.94)}60%{transform:scale(1.07)}100%{transform:scale(1)}}
 .count.bump{animation:count-bump var(--d-pop) var(--ease-settle)}
