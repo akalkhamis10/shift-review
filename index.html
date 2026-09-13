@@ -67,12 +67,12 @@ header{position:sticky;top:0;z-index:9;background:var(--paper);padding:10px 14px
 .count{font-family:var(--display);font-weight:400;font-size:20px;font-variant-numeric:tabular-nums;white-space:nowrap;flex:none}
 .track{height:10px;background:var(--bg);border-radius:6px;margin-block-start:8px;overflow:hidden}
 .track i{display:block;height:100%;background:var(--palm);border-radius:6px;transition:width .25s ease}
-.hintrow{position:relative;min-height:38px}
-.netnote{position:absolute;inset-block-start:0;inset-inline-start:0;font-size:13px;font-weight:700;max-width:62%;line-height:1.4;text-align:start}
+/* صفّ واحد حقيقي: كان «وصلت» و«حُفظ» عنصرين مطلقين فوق بعضهما فتراكب الحرف على الحرف (عيب المؤسّس 13 سبتمبر ليلاً) */
+.hintrow{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:22px;margin-block-start:6px}
+.netnote{font-size:14px;font-weight:700;line-height:1.45;text-align:start;min-width:0}
 .netnote.sent{color:var(--palm-ink)}
 .netnote.queued{color:var(--gold2)}
-.saved{position:absolute;inset:0;display:flex;align-items:center;background:var(--paper);
-  font-size:14px;color:var(--palm-ink);font-weight:700;opacity:0;transition:opacity .25s;pointer-events:none}
+.saved{font-size:14px;color:var(--palm-ink);font-weight:700;opacity:0;transition:opacity .25s;white-space:nowrap;flex:none}
 /* لماذا هذه الجملة ظاهرة دائماً: سفاري يمسح تخزين الموقع بعد نحو أسبوع بلا فتح — معرفة تخصّ المعلّم لا تبقى عندنا (قرار المؤسّس) */
 .keep{font-size:14px;line-height:1.5;color:var(--ink2);opacity:.9;margin:4px 0 0}
 .saved.on{opacity:1}
@@ -135,6 +135,7 @@ label.lb{display:block;font-weight:800;font-size:16px;margin-block-end:6px}
 .hint{font-size:14px;color:var(--ink2);margin-block-start:6px}
 .welcome{text-align:center}
 .welcome .q{text-align:right}
+.arrived{font-size:16px;font-weight:800;color:var(--palm-ink);background:var(--palm-soft);border-radius:12px;padding:10px 12px;margin:14px 0 0}
 .privacy{font-size:14px;line-height:1.6;color:var(--ink2);background:var(--bg);border-radius:12px;padding:10px 12px;margin:14px 0 0;text-align:start}
 .big-logo{height:40px;width:auto;margin-block:2px 22px}          /* توقيع لا صدارة: العنوان هو الأكبر */
 h1.lead{font-size:34px;line-height:1.25;margin-block-end:4px}
@@ -171,12 +172,12 @@ ul.three b{color:var(--ink)}
     <span class="count" id="count">٠ من ٢٤</span>
   </div>
   <div class="track"><i id="bar" style="width:0"></i></div>
-  <button class="copyBar" id="copyTop">⎘ انسخ إجاباتك <span class="n" id="copyN"></span></button>
+  <button class="copyBar" id="copyTop" hidden>⎘ انسخ إجاباتك <span class="n" id="copyN"></span></button>
   <div class="hintrow">
-    <p class="keep" id="keep">إجاباتك محفوظة على جهازك — إن طالت المدة، انسخها احتياطاً.</p>
-    <div class="saved" id="saved">حُفظ على جهازك</div>
     <span class="netnote" id="netnote" hidden></span>
+    <span class="saved" id="saved" hidden>حُفظ على جهازك</span>
   </div>
+  <p class="keep" id="keep" hidden>الحفظ على المتصفّح لا يدوم طويلاً — انسخ إجاباتك احتياطاً.</p>
 </header>
 <div class="alarm" id="alarm" hidden></div>
 <div class="remind" id="remind" hidden></div>
@@ -225,7 +226,8 @@ function save(){
     console.warn('SHIFT review: تعذّر الحفظ —', why, e);   /* يُسجَّل دائماً، لا يُخفى */
   }
   setStorage(state, why);
-  if (state === 'ok'){ const el = $('#saved'); el.classList.add('on'); clearTimeout(saveT); saveT = setTimeout(() => el.classList.remove('on'), 1200); }
+  if (state === 'ok' && !SYNC){ const el = $('#saved'); el.hidden = false; el.classList.add('on');
+    clearTimeout(saveT); saveT = setTimeout(() => el.classList.remove('on'), 1200); }
   maybeRemind();
 }
 function setStorage(state, why){
@@ -237,17 +239,23 @@ function setStorage(state, why){
   if (state === 'ok'){ bar.hidden = true; bar.className = 'alarm'; return; }
   bar.hidden = false;
   bar.className = 'alarm ' + state;
+  /* النصّ يتبع السلوك: مع الإرسال المباشر لم يعد الخطر «تضيع إجاباتك» بل «لن تستأنف على هذا الجهاز». */
   const text = state === 'blocked'
-    ? '<b>جهازك يمنع الحفظ على هذه الصفحة.</b> تستطيع الإجابة كالمعتاد، لكن انسخ إجاباتك قبل إغلاق الصفحة.'
+    ? (SYNC ? '<b>جهازك يمنع الحفظ المحلي على هذه الصفحة.</b> إجاباتك تصل إلينا أولاً بأول، لكنك لن تستأنف من حيث توقّفت إن أغلقت الصفحة.'
+            : '<b>جهازك يمنع الحفظ على هذه الصفحة.</b> تستطيع الإجابة كالمعتاد، لكن انسخ إجاباتك قبل إغلاق الصفحة.')
     : state === 'embedded'
-    ? '<b>الصفحة مفتوحة داخل تطبيق آخر، وقد تُمسح إجاباتك عند إغلاقه.</b> انسخ إجاباتك كل حين، أو افتح الرابط في المتصفّح (سفاري أو كروم) ليبقى الحفظ.'
-    : '<b>لم تُحفظ إجاباتك على هذا الجهاز.</b> انسخها الآن حتى لا تضيع' + (why ? ' <span class="why">(' + esc(why) + ')</span>' : '') + '.';
-  bar.innerHTML = text + '<button class="copyNow" id="alarmCopy">⎘ انسخ إجاباتك الآن</button>';
-  $('#alarmCopy').onclick = () => copyText(message(), 'نُسخت — الصقها في ملاحظة أو في واتساب حتى لا تضيع.');
+    ? (SYNC ? '<b>الصفحة مفتوحة داخل تطبيق آخر.</b> إجاباتك تصل إلينا أولاً بأول، لكن بعض الأجهزة تمسح ما حُفظ محلياً عند إغلاقه فلا تستأنف من حيث توقّفت — افتح الرابط في المتصفّح (سفاري أو كروم) لتستأنف.'
+            : '<b>الصفحة مفتوحة داخل تطبيق آخر، وقد تُمسح إجاباتك عند إغلاقه.</b> انسخ إجاباتك كل حين، أو افتح الرابط في المتصفّح (سفاري أو كروم) ليبقى الحفظ.')
+    : (SYNC ? '<b>تعذّر الحفظ على هذا الجهاز.</b> إجاباتك تصل إلينا أولاً بأول' + (why ? ' <span class="why">(' + esc(why) + ')</span>' : '') + '، لكنها لن تبقى على الجهاز.'
+            : '<b>لم تُحفظ إجاباتك على هذا الجهاز.</b> انسخها الآن حتى لا تضيع' + (why ? ' <span class="why">(' + esc(why) + ')</span>' : '') + '.');
+  bar.innerHTML = text + (atRisk() ? '<button class="copyNow" id="alarmCopy">⎘ انسخ إجاباتك الآن</button>' : '');
+  const ac = $('#alarmCopy'); if (ac) ac.onclick = () => copyText(message(), 'نُسخت — الصقها في ملاحظة أو في واتساب حتى لا تضيع.');
+  uiState();
 }
 /* تذكير كل خمسة دروس: «احفظ نسخة» — لا يعتمد على تخزين المتصفّح إطلاقاً */
 function maybeRemind(){
   const d = doneCount(), box = $('#remind'); if (!box) return;
+  if (!atRisk()) return;                     /* الإرسال يعمل: «احفظ نسخة» تخويف بلا سبب */
   if (!(d > 0 && d % 5 === 0) || S.remindedAt === d) return;
   S.remindedAt = d;
   box.hidden = false;
@@ -322,14 +330,28 @@ async function flush(final){
   flushing = false;
   setNet(Object.keys(PENDING).length ? (failed ? 'queued' : 'queued') : 'sent');
 }
-/* المؤشّر صادق: «وصلت» بعد ردّ الخادم لا بعد المحاولة (قاعدة الوعد المرئي في CLAUDE.md) */
+/* المؤشّر صادق: «وصلت» بعد ردّ الخادم لا بعد المحاولة (قاعدة الوعد المرئي في CLAUDE.md).
+   والنصّ يتبع السلوك: بعد أن صار الإرسال مباشراً، الحالة الطبيعية تقول شيئاً واحداً هادئاً ولا تخوّف بالنسخ.
+   شبكة النسخ والتحذير تظهر حين تكون هي الحقيقة: بلا وجهة إرسال، أو طابور لم يصل. */
 function setNet(state){
-  if (state === NET) return; NET = state;
-  const el = $('#netnote'); if (!el) return;
-  if (!SYNC || !state){ el.hidden = true; return; }
-  el.hidden = false;
-  el.className = 'netnote ' + state;
-  el.textContent = state === 'sent' ? '✓ وصلت إلى SHIFT' : 'محفوظة على جهازك، سترسل تلقائياً عند عودة الشبكة.';
+  NET = state;
+  const el = $('#netnote');
+  if (el){
+    if (!SYNC || !state){ el.hidden = true; }
+    else { el.hidden = false; el.className = 'netnote ' + state;
+      el.textContent = state === 'sent' ? '✓ وصلت إلى SHIFT' : 'لم تصل بعد — محفوظة على جهازك وسترسل تلقائياً عند عودة الشبكة.'; }
+  }
+  uiState();
+}
+/* atRisk: هل عمل المعلّم معرَّض للضياع الآن؟ عندها وحدها تظهر شبكة النسخ والتحذير والتذكير. */
+const atRisk = () => !SYNC || NET === 'queued' || STORAGE === 'blocked' || STORAGE === 'failed';
+function uiState(){
+  const risk = atRisk(), any = doneCount() > 0 || Object.keys(S.ans || {}).length > 0;
+  /* بلا وجهة إرسال: النسخ هو المخرج الوحيد فيبقى ظاهراً دائماً (قاعدة المؤسّس قبل التوصيل).
+     مع الإرسال: يظهر حين يكون هناك ما لم يصل فعلاً — لا زرّاً بارزاً بلا سبب. */
+  const copy = $('#copyTop'); if (copy) copy.hidden = !(risk && (!SYNC || any));
+  const keep = $('#keep');    if (keep) keep.hidden = !risk;         /* «انسخها احتياطاً» تقال حين تكون حقيقة لا عادة */
+  const rem  = $('#remind');  if (rem && !risk) rem.hidden = true;
 }
 if (SYNC){
   addEventListener('online', () => flush());
@@ -366,6 +388,8 @@ function render(){
   toTop();
   if (NAVDIR){ const c = $('#count'); c.classList.remove('bump'); void c.offsetWidth; c.classList.add('bump'); }
   NAVDIR = 0;
+  $('#copyN').textContent = doneCount() ? '(' + AR(doneCount()) + ')' : '';
+  uiState();
 }
 let NAVDIR = 0;                     /* +1 التالي · −1 السابق · 0 بلا تنقّل */
 /* التمرير فوري لا سلس، ويُعاد بعد الرسم: تبدّل ارتفاع المحتوى كان يُرجِع الموضع (scroll anchoring) */
@@ -383,10 +407,11 @@ function intro(){
     <h1 class="lead">مراجعة منهج الاجتماعيات — الصف الخامس</h1>
     <ul class="three">
       <li><b>ما هذا:</b> نبني ألعاباً تعليمية مربوطة بمنهج الكويت، ونحتاج رأي معلم اجتماعيات حقيقي.</li>
-      <li><b>كم يأخذ:</b> يمكنك الإكمال على دفعات — الإجابات تُحفظ على جهازك، واحتفظ بنسخة بزرّ «انسخ إجاباتك» من حين لآخر.</li>
+      <li><b>كم يأخذ:</b> يمكنك الإكمال على دفعات — ${SYNC ? 'كل إجابة تصل إلينا لحظة حفظها، وتبقى على جهازك أيضاً.' : 'الإجابات تُحفظ على جهازك، واحتفظ بنسخة بزرّ «انسخ إجاباتك» من حين لآخر.'}</li>
       <li><b>لماذا أنت:</b> رأيك يقرّر أي درس نبني له لعبة أولاً.</li>
     </ul>
-    <p class="privacy">يُرسل إلى SHIFT: إجاباتك عن الدروس، واسمك ومدرستك إن كتبتهما. <b>لا شيء عن الطلاب إطلاقاً.</b></p>
+    <p class="privacy">${SYNC ? 'يُرسل إلى SHIFT: إجاباتك عن الدروس، واسمك ومدرستك إن كتبتهما. <b>لا شيء عن الطلاب إطلاقاً.</b>'
+                              : 'إجاباتك تبقى على جهازك ولا يُرسل شيء تلقائياً. <b>لا نجمع شيئاً عن الطلاب إطلاقاً.</b>'}</p>
     <div class="q"><label class="lb" for="who">اسمك (اختياري)</label>
       <input type="text" id="who" value="${esc(S.who)}" placeholder="ليصل ردّك باسمك">
       <label class="lb" style="margin-block-start:12px" for="school">المدرسة (اختياري)</label>
@@ -443,13 +468,14 @@ function outro(){
     ${left.length ? `<p class="sub" style="margin-block-end:4px">لم تُراجَع بعد — اضغط الدرس للعودة إليه:</p>
        <div class="left">${left.map(l => `<button data-go="${LESSONS.indexOf(l) + 1}">${esc(l.unitCode)} ${AR(l.n)}</button>`).join('')}</div>`
                   : `<p class="done-note">كل الدروس مُراجَعة — شكراً.</p>`}
+    ${SYNC ? `<p class="arrived">✓ ${AR(done)} ${done === 1 ? 'إجابة وصلت' : 'إجابة وصلت'} إلى SHIFT — لا يلزمك إرسال شيء.</p>` : ''}
     <div style="margin-block-start:18px">
-      <button class="send" id="send">أرسل لعبدالرحمن</button>
-      <button class="send alt" id="copy">انسخ الإجابات بدل الإرسال</button>
-      <p class="hint" id="sendNote">يفتح واتساب برسالة جاهزة — تراجعها قبل الإرسال. إن لم يفتح، استعمل «انسخ الإجابات».</p>
+      <button class="send ${SYNC ? 'alt' : ''}" id="send">${SYNC ? 'أرسل نسخة لعبدالرحمن (اختياري)' : 'أرسل لعبدالرحمن'}</button>
+      <button class="send alt" id="copy">انسخ الإجابات${SYNC ? '' : ' بدل الإرسال'}</button>
+      <p class="hint" id="sendNote">${SYNC ? 'الإرسال هنا احتياط لا أكثر — إجاباتك وصلت بالفعل.' : 'يفتح واتساب برسالة جاهزة — تراجعها قبل الإرسال. إن لم يفتح، استعمل «انسخ الإجابات».'}</p>
     </div>
   </div>
-  <div class="card"><h3 style="margin-top:0">ما سيُرسَل</h3><textarea id="preview" rows="10" readonly>${esc(message())}</textarea></div>`;
+  <div class="card"><h3 style="margin-top:0">${SYNC ? 'ما وصل إلينا' : 'ما سيُرسَل'}</h3><textarea id="preview" rows="10" readonly>${esc(message())}</textarea></div>`;
 }
 
 /* ---------- الرسالة: سطر لكل درس، تُقرأ بالعين وتُستورَد آلياً ---------- */
