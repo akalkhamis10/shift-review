@@ -117,8 +117,12 @@ li{margin-block-end:6px}
 .tag.q{background:var(--gold-soft);color:var(--gold2)}
 .ko{display:flex;gap:8px;align-items:flex-start;margin-block-end:8px}
 .ko .k{flex:0 0 auto;font-size:14px;font-weight:800;color:var(--ink2);background:var(--bg);border-radius:8px;padding:2px 8px}
-.left{display:flex;flex-wrap:wrap;gap:8px;margin-block:8px 0}
-.left button{min-height:44px;min-width:64px;border-radius:12px;border:2px solid var(--line);background:var(--paper);font-weight:800;font-size:15px;cursor:pointer}
+.left{display:grid;gap:8px;margin-block:8px 0}
+/* عنوان الدرس كاملاً على سطرين إن لزم — كان يُقصّ فيبتر المعنى (عيب المؤسّس 13 سبتمبر ليلاً) */
+.left button{display:flex;align-items:center;gap:8px;width:100%;min-height:48px;padding:10px 12px;border-radius:12px;
+  border:2px solid var(--line);background:var(--paper);color:var(--ink);font-family:inherit;font-weight:700;font-size:15px;
+  line-height:1.45;text-align:start;white-space:normal;cursor:pointer}
+.left button .code{font-weight:800;color:var(--ink2);flex:none}
 
 /* ---------- المدخلات ---------- */
 .q{margin-block-start:18px;padding-block-start:14px;border-block-start:2px dashed var(--line)}
@@ -142,7 +146,8 @@ label.lb{display:block;font-weight:800;font-size:16px;margin-block-end:6px}
 .leftn{font-size:14px;font-weight:700;color:var(--ink2);white-space:nowrap;flex:none}
 .skipnote{margin:8px 14px 0;padding:9px 12px;border-radius:12px;background:var(--bg);color:var(--ink2);
   font-size:14px;line-height:1.5;max-width:760px;margin-inline:auto}
-.arrived{font-size:16px;font-weight:800;color:var(--palm-ink);background:var(--palm-soft);border-radius:12px;padding:10px 12px;margin:14px 0 0}
+.center{text-align:center}
+.sub.big{font-size:18px;color:var(--palm-ink);font-weight:700}
 .privacy{font-size:14px;line-height:1.6;color:var(--ink2);background:var(--bg);border-radius:12px;padding:10px 12px;margin:14px 0 0;text-align:start}
 .big-logo{height:40px;width:auto;margin-block:2px 22px}          /* توقيع لا صدارة: العنوان هو الأكبر */
 h1.lead{font-size:34px;line-height:1.25;margin-block-end:4px}
@@ -354,8 +359,12 @@ function setNet(state){
 }
 /* atRisk: هل عمل المعلّم معرَّض للضياع الآن؟ عندها وحدها تظهر شبكة النسخ والتحذير والتذكير. */
 const atRisk = () => !SYNC || NET === 'queued' || STORAGE === 'blocked' || STORAGE === 'failed';
+let LASTRISK = null;
 function uiState(){
   const risk = atRisk(), any = doneCount() > 0 || Object.keys(S.ans || {}).length > 0;
+  /* شاشة النهاية تتبدّل بتبدّل الحالة: لو سقطت الشبكة والمعلّم واقف عليها، يظهر المخرج فوراً لا بعد تنقّل */
+  if (LASTRISK !== null && LASTRISK !== risk && S.at === LAST){ LASTRISK = risk; render(); return; }
+  LASTRISK = risk;
   /* بلا وجهة إرسال: النسخ هو المخرج الوحيد فيبقى ظاهراً دائماً (قاعدة المؤسّس قبل التوصيل).
      مع الإرسال: يظهر حين يكون هناك ما لم يصل فعلاً — لا زرّاً بارزاً بلا سبب. */
   const copy = $('#copyTop'); if (copy) copy.hidden = !(risk && (!SYNC || any));
@@ -486,22 +495,27 @@ function lesson(l){
     </div>`).join('')}`;
 }
 function outro(){
-  const done = doneCount(), left = lessonsLeft();
-  /* «انتهيت» لا تُقال قبل اكتمال الأحكام الـ٢٤ (قرار المؤسّس): الناقص يُسرد ويُقفَز إليه بضغطة */
+  const done = doneCount(), left = lessonsLeft(), risk = atRisk();
+  /* الحالة الطبيعية عند الاكتمال: سطران لا أكثر — لا زرّ إرسال ولا معاينة ولا اسم شخص.
+     الإرسال والنسخ والمعاينة تظهر حين تكون هي المخرج فعلاً (بلا وجهة، أو طابور لم يصل). */
+  if (!left.length && SYNC && !risk){
+    return `<div class="card center">
+      <h1>انتهيت ✓</h1>
+      <p class="sub big">وصلت إجاباتك إلى SHIFT.</p>
+    </div>`;
+  }
   return `<div class="card">
-    <h1>${left.length ? 'بقي ' + plural(left.length) + ' بلا إجابة' : 'انتهيت ✓'}</h1>
-    <p class="sub">أجبت ${AR(done)} من ${AR(LESSONS.length)} درساً.</p>
+    <h1>${left.length ? 'بقي ' + plural(left.length) : 'انتهيت ✓'}</h1>
+    <p class="sub">أجبت ${AR(done)} من ${AR(LESSONS.length)} درساً.${!left.length && SYNC ? ' وصلت إجاباتك إلى SHIFT.' : ''}</p>
     ${left.length ? `<p class="sub" style="margin-block-end:4px">اضغط الدرس لتذهب إليه مباشرة:</p>
-       <div class="left">${left.map(l => `<button data-go="${LESSONS.indexOf(l) + 1}">${esc(l.unitCode)} ${AR(l.n)} · ${esc(l.title.slice(0, 22))}</button>`).join('')}</div>`
-                  : `<p class="done-note">كل الدروس الأربعة والعشرين أُجيبت — شكراً.</p>`}
-    ${SYNC ? `<p class="arrived">✓ ${AR(done)} ${done === 1 ? 'إجابة وصلت' : 'إجابة وصلت'} إلى SHIFT — لا يلزمك إرسال شيء.</p>` : ''}
-    <div style="margin-block-start:18px">
-      <button class="send ${SYNC ? 'alt' : ''}" id="send">${SYNC ? 'أرسل نسخة لعبدالرحمن (اختياري)' : 'أرسل لعبدالرحمن'}</button>
-      <button class="send alt" id="copy">انسخ الإجابات${SYNC ? '' : ' بدل الإرسال'}</button>
-      <p class="hint" id="sendNote">${SYNC ? 'الإرسال هنا احتياط لا أكثر — إجاباتك وصلت بالفعل.' : 'يفتح واتساب برسالة جاهزة — تراجعها قبل الإرسال. إن لم يفتح، استعمل «انسخ الإجابات».'}</p>
-    </div>
+       <div class="left">${left.map(l => `<button data-go="${LESSONS.indexOf(l) + 1}"><span class="code">${esc(l.unitCode)} ${AR(l.n)}</span><span>${esc(l.title)}</span></button>`).join('')}</div>` : ''}
+    ${risk ? `<div style="margin-block-start:18px">
+      <button class="send" id="copy">⎘ انسخ الإجابات</button>
+      <button class="send alt" id="send">أرسل المراجعة عبر واتساب</button>
+      <p class="hint" id="sendNote">${SYNC ? 'إجاباتك لم تصل كلها بعد — احتفظ بنسخة أو أرسلها من هنا.' : 'يفتح واتساب برسالة جاهزة — تراجعها قبل الإرسال. إن لم يفتح، استعمل «انسخ الإجابات».'}</p>
+    </div>` : ''}
   </div>
-  <div class="card"><h3 style="margin-top:0">${SYNC ? 'ما وصل إلينا' : 'ما سيُرسَل'}</h3><textarea id="preview" rows="10" readonly>${esc(message())}</textarea></div>`;
+  ${risk ? `<div class="card"><h3 style="margin-top:0">${SYNC ? 'ما لم يصل بعد' : 'ما سيُرسَل'}</h3><textarea id="preview" rows="10" readonly>${esc(message())}</textarea></div>` : ''}`;
 }
 
 /* ---------- الرسالة: سطر لكل درس، تُقرأ بالعين وتُستورَد آلياً ---------- */
@@ -534,6 +548,7 @@ function wire(i){
     return;
   }
   if (i === LAST){
+    if (!$('#send')) return;                    /* الحالة الطبيعية: لا أزرار إرسال أصلاً */
     $('#send').onclick = () => {
       const t = encodeURIComponent(message());
       /* الرقم لا يُكتب رقماً في الصفحة (شرط المؤسّس 13 سبتمبر): يُخزَّن رابط wa.me معمّى ويُفكّ عند الضغط،
@@ -544,7 +559,7 @@ function wire(i){
          فالبديل يعمل في الحالتين، ولا يُترك الزرّ ميتاً بلا تفسير. */
       let w = null;
       try { w = window.open(url, '_blank'); } catch(e){ console.warn('SHIFT review: تعذّر فتح واتساب —', e); }
-      if (!w) { copyText(message(), 'لم يفتح واتساب من هنا — نُسخت إجاباتك، الصقها في محادثة عبدالرحمن.'); }
+      if (!w) { copyText(message(), 'لم يفتح واتساب من هنا — نُسخت إجاباتك، الصقها في محادثة SHIFT.'); }
     };
     $('#copy').onclick = () => copyText(message(), 'نُسخت الإجابات — الصقها في أي تطبيق.');
     return;
