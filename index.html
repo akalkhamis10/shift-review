@@ -128,7 +128,7 @@ header{position:sticky;top:0;z-index:9;background:var(--paper);padding:10px 14px
 .alarm.blocked{background:var(--gold-soft);border:3px solid var(--gold);color:var(--ink)}
 .alarm.failed{background:var(--sadu-soft);border:3px solid var(--sadu);color:var(--sadu-ink)}
 .alarm.embedded{background:var(--gold-soft);border:3px dashed var(--gold);color:var(--ink)}
-.alarm .why{font-size:13px;opacity:.75}
+.alarm .why{font-size:14px;opacity:.75}
 .alarm .copyNow,.remind .copyNow{display:block;width:100%;min-height:48px;margin-block-start:10px;border:0;border-radius:14px;
   background:var(--ink);color:var(--paper);font-weight:800;font-size:16px;cursor:pointer;font-family:inherit}
 
@@ -168,9 +168,9 @@ label.lb{display:block;font-weight:800;font-size:16px;margin-block-end:6px}
 .hint{font-size:14px;color:var(--ink2);margin-block-start:6px}
 .welcome{text-align:center}
 .welcome .q{text-align:right}
-.need{display:inline-block;font-size:13px;font-weight:800;color:var(--sadu-ink);background:var(--sadu-soft);
+.need{display:inline-block;font-size:14px;font-weight:800;color:var(--sadu-ink);background:var(--sadu-soft);
   border-radius:8px;padding:1px 8px;margin-inline-start:6px;vertical-align:middle}
-.opt{display:inline-block;font-size:13px;font-weight:700;color:var(--ink2);background:var(--bg);
+.opt{display:inline-block;font-size:14px;font-weight:700;color:var(--ink2);background:var(--bg);
   border-radius:8px;padding:1px 8px;margin-inline-start:6px;vertical-align:middle}
 .leftn{font-size:14px;font-weight:700;color:var(--ink2);white-space:nowrap;flex:none}
 .skipnote{margin:8px 14px 0;padding:9px 12px;border-radius:12px;background:var(--bg);color:var(--ink2);
@@ -461,13 +461,21 @@ function firstUnanswered(){
 }
 const isDone = id => { const a = S.ans[id] || {}; return !!a.state; };
 const doneCount = () => LESSONS.filter(l => isDone(l.id)).length;
+/* عدّادات الرأس الأربعة في نداء واحد. كانت تُكتب سطراً سطراً في موضعين، فنُسي «متبقٍ» في موضع
+   الحكم: يضغط المعلم «صحيح» فيصير العدّاد «١ من ٢٤» ويبقى تحته «متبقٍ ٢٤ درساً» حتى ينتقل —
+   نصّ يكذب على من يقرؤه. مصدر واحد يمنع أن يتخلّف عدّاد خامس غداً. */
+function refreshCounts(){
+  const d = doneCount(), n = LESSONS.length, k = lessonsLeft().length;
+  const c = $('#count'); if (c) c.textContent = AR(d) + ' من ' + AR(n);
+  const cn = $('#copyN'); if (cn) cn.textContent = d ? '(' + AR(d) + ')' : '';
+  const b = $('#bar'); if (b) b.style.width = (d / n * 100).toFixed(1) + '%';
+  const ln = $('#leftn'); if (ln){ ln.hidden = S.at === 0 || k === 0; ln.textContent = 'متبقٍ: ' + plural(k); }
+}
 
 /* ---------- الرسم ---------- */
 function render(){
   const i = S.at = Math.max(0, Math.min(LAST, S.at));
-  $('#count').textContent = AR(doneCount()) + ' من ' + AR(LESSONS.length);
-  $('#copyN').textContent = doneCount() ? '(' + AR(doneCount()) + ')' : '';
-  $('#bar').style.width = (doneCount() / LESSONS.length * 100).toFixed(1) + '%';
+  refreshCounts();
   $('#prev').disabled = i === 0;
   $('#next').textContent = i === LAST ? 'إلى الأعلى' : i === 0 ? 'ابدأ المراجعة' : 'التالي';
   $('#nav').hidden = i === 0;                 /* شاشة الترحيب: زرّ «ابدأ» وحده */
@@ -480,9 +488,7 @@ function render(){
   toTop();
   if (NAVDIR){ const c = $('#count'); c.classList.remove('bump'); void c.offsetWidth; c.classList.add('bump'); }
   NAVDIR = 0;
-  $('#copyN').textContent = doneCount() ? '(' + AR(doneCount()) + ')' : '';
-  const nLeft = lessonsLeft().length, ln = $('#leftn');
-  if (ln){ ln.hidden = i === 0 || nLeft === 0; ln.textContent = 'متبقٍ: ' + plural(nLeft); }
+  refreshCounts();                  /* بعد wire(): الرأس يعيش خارج البطاقة فلا يُعاد رسمه معها */
   uiState();
 }
 let NAVDIR = 0;                     /* +1 التالي · −1 السابق · 0 بلا تنقّل */
@@ -636,9 +642,7 @@ function wire(i){
     document.querySelectorAll('[data-state]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.state === a.state)));
     $('#fixBox').hidden = a.state !== 'fix';
     if (a.state === 'fix') $('#note').focus();
-    $('#count').textContent = AR(doneCount()) + ' من ' + AR(LESSONS.length);
-  $('#copyN').textContent = doneCount() ? '(' + AR(doneCount()) + ')' : '';
-    $('#bar').style.width = (doneCount() / LESSONS.length * 100).toFixed(1) + '%';
+    refreshCounts();
   });
   const note = $('#note'); if (note) note.oninput = e => { ansOf(l.id).note = e.target.value; save(); queueRow(l.id); };
   $('#week').onchange = e => { ansOf(l.id).week = e.target.value; save(); queueRow(l.id); };
