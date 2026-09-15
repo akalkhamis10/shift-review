@@ -98,6 +98,7 @@ header{position:sticky;top:0;z-index:9;background:var(--paper);padding:10px 14px
 .track i{display:block;height:100%;background:var(--palm);border-radius:6px;transition:width .25s ease}
 /* صفّ واحد حقيقي: كان «وصلت» و«حُفظ» عنصرين مطلقين فوق بعضهما فتراكب الحرف على الحرف (عيب المؤسّس 13 سبتمبر ليلاً) */
 .hintrow{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:22px;margin-block-start:6px}
+.cap{font-size:14px;color:var(--ink2);margin:6px 0 0;text-align:start}
 .netnote{font-size:14px;font-weight:700;line-height:1.45;text-align:start;min-width:0}
 .netnote.sent{color:var(--palm-ink)}
 .netnote.queued{color:var(--gold2)}
@@ -313,12 +314,23 @@ function maybeRemind(){
    والجهاز يبقى المصدر الأول: الصفحة تعمل كاملة بلا إنترنت، وما لم يصل يبقى في طابور يُفرَّغ عند عودة الشبكة.
    الأمان: الصفحة لا تلمس الجدول إطلاقاً — كتابة واحدة عبر دالّة submit_review تتحقّق من رمز الجهاز
    قبل أن تكتب، فلا يكتب أحد فوق إجابات غيره حتى لو عرف معرّفه. ولا قراءة من العميل بأي حال. */
+/* حدود الحقول — **نفس قيود الجدول حرفياً** (‏001_review_responses.sql). تُفرض هنا قبل الإرسال
+   لا بعده: صفٌّ يتجاوز الحدّ يردّه الخادم بـ400، وكان ذلك يوقف كل ما خلفه في الطابور. */
+const LIM = { note: 2000, hard: 2000, name: 120, school: 120, lesson: 40, week: [1, 16] };
+const cut = (v, n) => (v == null ? null : String(v).slice(0, n) || null);
+
 const SYNC = DATA.sync && DATA.sync.url && DATA.sync.key ? DATA.sync : null;
-const QKEY = KEY + '.queue', SKEY = KEY + '.sent';
-let PENDING = {}, DELIVERED = {}, flushT = 0, flushing = false, NET = '';
+const QKEY = KEY + '.queue', SKEY = KEY + '.sent', XKEY = KEY + '.stuck', TKEY = KEY + '.tries';
+let PENDING = {}, DELIVERED = {}, STUCK = {}, TRIES = {}, flushT = 0, flushing = false, NET = '';
 try { PENDING   = JSON.parse(localStorage.getItem(QKEY) || '{}') || {}; } catch(e){ PENDING = {}; }
 try { DELIVERED = JSON.parse(localStorage.getItem(SKEY) || '{}') || {}; } catch(e){ DELIVERED = {}; }
-const savePending = () => { try { localStorage.setItem(QKEY, JSON.stringify(PENDING)); localStorage.setItem(SKEY, JSON.stringify(DELIVERED)); } catch(e){} };
+try { STUCK     = JSON.parse(localStorage.getItem(XKEY) || '{}') || {}; } catch(e){ STUCK = {}; }
+try { TRIES     = JSON.parse(localStorage.getItem(TKEY) || '{}') || {}; } catch(e){ TRIES = {}; }
+const savePending = () => { try { localStorage.setItem(QKEY, JSON.stringify(PENDING)); localStorage.setItem(SKEY, JSON.stringify(DELIVERED));
+  localStorage.setItem(XKEY, JSON.stringify(STUCK)); localStorage.setItem(TKEY, JSON.stringify(TRIES)); } catch(e){} };
+/* العزل: يخرج من الطابور فلا يحجب، ويبقى مسجّلاً بسببه فلا يُنسى ولا يُدّعى وصوله */
+function park(code, why){ delete PENDING[code]; delete TRIES[code]; STUCK[code] = why; savePending();
+  console.warn('SHIFT review: عُزل صفّ لم يصل —', code, why); }
 /* ما كُتب قبل تفعيل الإرسال (أو بلا شبكة) لا يضيع: عند كل فتح، كل إجابة لم يؤكّد الخادم وصولها تدخل الطابور.
    ولهذا لا يحتاج التفعيل لاحقاً أكثر من وضع الرابط والمفتاح وإعادة النشر — الصفحة تلحق ما فات وحدها. */
 function seedQueue(){
@@ -326,7 +338,7 @@ function seedQueue(){
   let added = 0;
   Object.keys(S.ans || {}).forEach(code => { const a = S.ans[code] || {};
     if (!(a.state || a.week || a.hard || a.note || a.text)) return;      /* سجلّ فارغ لا يُرسل */
-    if (!DELIVERED[code]) { PENDING[code] = 1; added++; } });
+    if (!DELIVERED[code] && !STUCK[code]) { PENDING[code] = 1; added++; } });   /* المعزول لا يعود ليحجب */
   if (added) savePending();
 }
 const rnd = n => { const a = new Uint8Array(n); (crypto.getRandomValues ? crypto : { getRandomValues: x => x.forEach((_, i) => x[i] = Math.random()*256|0) }).getRandomValues(a);
@@ -367,6 +379,8 @@ function freeLock(){ try { const c = JSON.parse(localStorage.getItem(LKEY) || 'n
 function reloadQueue(){
   try { const p = JSON.parse(localStorage.getItem(QKEY) || 'null'); if (p && typeof p === 'object') PENDING = p; } catch(e){}
   try { const d = JSON.parse(localStorage.getItem(SKEY) || 'null'); if (d && typeof d === 'object') DELIVERED = d; } catch(e){}
+  try { const x = JSON.parse(localStorage.getItem(XKEY) || 'null'); if (x && typeof x === 'object') STUCK = x; } catch(e){}
+  try { const k = JSON.parse(localStorage.getItem(TKEY) || 'null'); if (k && typeof k === 'object') TRIES = k; } catch(e){}
 }
 /* والإجابات مشتركة كذلك: نسخة هذا التبويب في الذاكرة قد تكون أقدم. يُملأ النقص من المحفوظ ولا
    يُكتب فوق ما في الذاكرة — فلا يُرسل صفّ فارغ فوق إجابة كتبها التبويب الآخر. */
@@ -382,37 +396,55 @@ function rowFor(code, F){
   const a = (F.ans || {})[code] || {};
   const flagged = /^Q\d+$/.test(code);
   return { p_teacher_id: ident().id, p_secret: ident().sec, p_curriculum: DATA.code || 'KW-SOC-G5-S1', p_lesson_code: code,
-    p_teacher_name: F.who || null, p_school: F.school || null,
+    p_teacher_name: cut(F.who, LIM.name), p_school: cut(F.school, LIM.school),
     p_verdict: flagged ? null : (a.state === 'ok' ? 'صحيح' : a.state === 'fix' ? 'يحتاج تعديل' : null),
-    p_note: flagged ? (a.text || null) : (a.note || null),
-    p_week: a.week ? +a.week : null, p_hardest: a.hard || null, p_device: deviceInfo() };
+    p_note: cut(flagged ? a.text : a.note, LIM.note),
+    p_week: (a.week && +a.week >= LIM.week[0] && +a.week <= LIM.week[1]) ? +a.week : null,
+    p_hardest: cut(a.hard, LIM.hard), p_device: deviceInfo() };
 }
 function queueRow(code){ if (!code) return; delete DELIVERED[code]; if (!SYNC) return;   /* بلا وجهة: لا شبكة، لكن الإجابة تبقى غير مسلّمة فتُرسل يوم يُفعَّل الإرسال */
   PENDING[code] = 1; savePending(); clearTimeout(flushT); flushT = setTimeout(flush, 1200); }
 function queueAll(){ Object.keys(S.ans || {}).forEach(c => { delete DELIVERED[c]; if (SYNC) PENDING[c] = 1; });
   if (!SYNC) return; savePending(); clearTimeout(flushT); flushT = setTimeout(flush, 1200); }
+/* ---------- تفريغ الطابور: صفٌّ فاسد لا يحجب ما خلفه (قرار المؤسّس 16 سبتمبر 2026) ----------
+   كانت الحلقة **تكسر عند أول صفّ يفشل**، فملاحظة واحدة أطول من الحدّ أو اسم مدرسة طويل يجمّد
+   كل ما خلفه إلى الأبد ويعيد المحاولة عليه كل ثلاثين ثانية. لم يقع (صفر خطأ في عشرين ساعة)،
+   لكنه كان أرجح سبب لتسريب صامت. القاعدة الآن:
+     • ردّ 4xx = خلل في البيانات، لا يُصلحه التكرار → يُعزَل في الطابور الجانبي فوراً **وتُكمَل البقية**.
+     • ردّ 5xx أو انقطاع شبكة = عابر ويشمل الجميع → يتوقّف هذا المرور بلا عزل، ويُعاد لاحقاً.
+     • ولكل صفّ سقف محاولات؛ من بلغه يُعزَل بسببه ولا يُطرَق بلا حدّ.
+   والمعزول **يُعلَن للمعلّم** ولا يُبتلع: «وصلت» لا تُقال عمّا لم يصل. */
+const MAX_TRIES = 6;
 async function flush(final){
   if (!SYNC || flushing) return;
   reloadQueue();                                    /* ما سلّمه تبويب آخر لا يُرسل ثانية */
   const codes = Object.keys(PENDING);
-  if (!codes.length){ setNet(Object.keys(DELIVERED).length ? 'sent' : ''); return; }   /* لا «وصلت» قبل أن يصل شيء فعلاً */
+  if (!codes.length){ setNet(Object.keys(STUCK).length ? 'stuck' : (Object.keys(DELIVERED).length ? 'sent' : '')); return; }
   if (navigator.onLine === false){ setNet('queued'); return; }
   if (!takeLock()){ setNet('queued'); clearTimeout(flushT); flushT = setTimeout(flush, 2000); return; }   /* الخاسر لا يفعل شيئاً */
   const F = fresh();
   flushing = true;
   const url = SYNC.url.replace(/\/$/, '') + '/rest/v1/rpc/submit_review';
   const headers = { 'apikey': SYNC.key, 'Authorization': 'Bearer ' + SYNC.key, 'Content-Type': 'application/json' };
-  let failed = false;
   for (const code of codes){
+    let transient = false;
     try {
       const r = await fetch(url, { method:'POST', headers, body: JSON.stringify(rowFor(code, F)), keepalive: !!final });
-      if (r.ok){ delete PENDING[code]; DELIVERED[code] = 1; savePending(); }   /* لا يُشطب إلا بردّ الخادم فعلاً */
-      else { failed = true; console.warn('SHIFT review: الخادم ردّ', r.status, await r.text().catch(() => '')); break; }
-    } catch(e){ failed = true; console.warn('SHIFT review: تعذّر الإرسال —', e && e.message); break; }
+      if (r.ok){ delete PENDING[code]; delete TRIES[code]; DELIVERED[code] = 1; savePending(); continue; }  /* لا يُشطب إلا بردّ الخادم */
+      const body = await r.text().catch(() => '');
+      console.warn('SHIFT review: الخادم ردّ', r.status, body);
+      if (r.status >= 400 && r.status < 500 && r.status !== 429) { park(code, 'ردّ ' + r.status); continue; }  /* خلل بيانات: اعزل وأكمل */
+      transient = true;
+    } catch(e){ console.warn('SHIFT review: تعذّر الإرسال —', e && e.message); transient = true; }
+    if (transient){
+      TRIES[code] = (TRIES[code] || 0) + 1; savePending();
+      if (TRIES[code] >= MAX_TRIES) { park(code, 'تعذّر بعد ' + MAX_TRIES + ' محاولات'); continue; }
+      break;                                        /* العطل عابر ويشمل الجميع: يُعاد المرور كلّه لاحقاً */
+    }
   }
   freeLock();
   flushing = false;
-  setNet(Object.keys(PENDING).length ? (failed ? 'queued' : 'queued') : 'sent');
+  setNet(Object.keys(PENDING).length ? 'queued' : (Object.keys(STUCK).length ? 'stuck' : 'sent'));
 }
 /* المؤشّر صادق: «وصلت» بعد ردّ الخادم لا بعد المحاولة (قاعدة الوعد المرئي في CLAUDE.md).
    والنصّ يتبع السلوك: بعد أن صار الإرسال مباشراً، الحالة الطبيعية تقول شيئاً واحداً هادئاً ولا تخوّف بالنسخ.
@@ -423,12 +455,15 @@ function setNet(state){
   if (el){
     if (!SYNC || !state){ el.hidden = true; }
     else { el.hidden = false; el.className = 'netnote ' + state;
-      el.textContent = state === 'sent' ? '✓ وصلت إلى SHIFT' : 'لم تصل بعد — محفوظة على جهازك وسترسل تلقائياً عند عودة الشبكة.'; }
+      /* «وصلت» لا تُقال عمّا لم يصل: للمعزول نصّه الخاص ومعه المخرج، ولا يُبتلع صامتاً. */
+      el.textContent = state === 'sent'  ? '✓ وصلت إلى SHIFT'
+                     : state === 'stuck' ? 'بعض إجاباتك لم تصل — انسخها من الزرّ أعلاه وأرسلها، وسنتابعها من جهتنا.'
+                     : 'لم تصل بعد — محفوظة على جهازك وسترسل تلقائياً عند عودة الشبكة.'; }
   }
   uiState();
 }
 /* atRisk: هل عمل المعلّم معرَّض للضياع الآن؟ عندها وحدها تظهر شبكة النسخ والتحذير والتذكير. */
-const atRisk = () => !SYNC || NET === 'queued' || STORAGE === 'blocked' || STORAGE === 'failed';
+const atRisk = () => !SYNC || NET === 'queued' || NET === 'stuck' || STORAGE === 'blocked' || STORAGE === 'failed';
 let LASTRISK = null;
 function uiState(){
   const risk = atRisk(), any = doneCount() > 0 || Object.keys(S.ans || {}).length > 0;
@@ -523,9 +558,9 @@ function intro(){
     <p class="privacy">${SYNC ? 'يُرسل إلى SHIFT: إجاباتك عن الدروس، واسمك ومدرستك إن كتبتهما، وإشارة مجهولة بأن الصفحة فُتحت وكم أتممت منها. <b>لا شيء عن الطلاب إطلاقاً.</b>'
                               : 'إجاباتك تبقى على جهازك ولا يُرسل شيء تلقائياً. <b>لا نجمع شيئاً عن الطلاب إطلاقاً.</b>'}</p>
     <div class="q"><label class="lb" for="who">اسمك (اختياري)</label>
-      <input type="text" id="who" value="${esc(S.who)}" placeholder="ليصل ردّك باسمك">
+      <input type="text" id="who" maxlength="120" value="${esc(S.who)}" placeholder="ليصل ردّك باسمك">
       <label class="lb" style="margin-block-start:12px" for="school">المدرسة (اختياري)</label>
-      <input type="text" id="school" value="${esc(S.school)}" placeholder="اسم المدرسة">
+      <input type="text" id="school" maxlength="120" value="${esc(S.school)}" placeholder="اسم المدرسة">
     </div>
     <button class="send" id="start" style="margin-block-start:18px">ابدأ</button>
   </div>`;
@@ -547,7 +582,8 @@ function lesson(l){
       </div>
       <div id="fixBox" ${a.state === 'fix' ? '' : 'hidden'} style="margin-block-start:10px">
         <label class="lb" for="note">ما التعديل؟</label>
-        <textarea id="note" placeholder="اكتب ما يحتاج تصحيحاً">${esc(a.note || '')}</textarea>
+        <textarea id="note" maxlength="${LIM.note}" placeholder="اكتب ما يحتاج تصحيحاً">${esc(a.note || '')}</textarea>
+      <p class="cap" id="noteCap" hidden></p>
       </div>
     </div>
 
@@ -559,7 +595,7 @@ function lesson(l){
     </div>
 
     <div class="q"><b>٣ · أصعب نقطة على الطلاب في هذا الدرس؟</b> <span class="opt">اختياري</span>
-      <input type="text" id="hard" value="${esc(a.hard || '')}" placeholder="اختياري — كلمة أو سطر">
+      <input type="text" id="hard" maxlength="${LIM.hard}" value="${esc(a.hard || '')}" placeholder="اختياري — كلمة أو سطر">
       <p class="hint">اكتب عن الدرس لا عن طالب بعينه — لا نجمع شيئاً عن الطلاب.</p>
     </div>
   </div>
@@ -567,7 +603,7 @@ function lesson(l){
       <p class="eyebrow">⚠ بند ننتظر جوابك عنه</p>
       <p><b>${esc(f.item)}</b></p>
       <p class="sub">${esc(f.q)}</p>
-      <textarea data-flag="${esc(f.id)}" placeholder="جوابك — أو «لا أعرف» وهذا جواب كافٍ">${esc((S.ans[f.id] || {}).text || '')}</textarea>
+      <textarea data-flag="${esc(f.id)}" maxlength="${LIM.note}" placeholder="جوابك — أو «لا أعرف» وهذا جواب كافٍ">${esc((S.ans[f.id] || {}).text || '')}</textarea>
     </div>`).join('')}`;
 }
 function outro(){
@@ -648,7 +684,17 @@ function wire(i){
     if (a.state === 'fix') $('#note').focus();
     refreshCounts();
   });
-  const note = $('#note'); if (note) note.oninput = e => { ansOf(l.id).note = e.target.value; save(); queueRow(l.id); };
+  const note = $('#note');
+  if (note){
+    /* العدّاد يظهر عند الاقتراب من الحدّ لا دائماً: على شاشة 375 كل سطر دائم ضجيج */
+    const cap = $('#noteCap'), show = v => { if (!cap) return;
+      const left = LIM.note - v.length;
+      cap.hidden = left > 200;
+      cap.textContent = left > 200 ? '' : (left > 0 ? 'بقي ' + AR(left) + ' حرفاً' : 'بلغت الحدّ — ' + AR(LIM.note) + ' حرفاً');
+    };
+    note.oninput = e => { ansOf(l.id).note = e.target.value; show(e.target.value); save(); queueRow(l.id); };
+    show(note.value);
+  }
   $('#week').onchange = e => { ansOf(l.id).week = e.target.value; save(); queueRow(l.id); };
   $('#hard').oninput = e => { ansOf(l.id).hard = e.target.value; save(); queueRow(l.id); };
   document.querySelectorAll('[data-flag]').forEach(t => t.oninput = e => { (S.ans[t.dataset.flag] = S.ans[t.dataset.flag] || {}).text = e.target.value; save(); queueRow(t.dataset.flag); });
