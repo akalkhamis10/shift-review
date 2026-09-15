@@ -554,6 +554,9 @@ const VISIT = { page: 'teacher-needs', src: () => source(), embedded: () => EMBE
   const PROBE = !!navigator.webdriver || /Headless/i.test(navigator.userAgent || '')
              || /(^|[?&])probe=1(&|$)/.test(location.search || '');
   const DEV = (innerWidth && innerWidth < 768) ? 'mobile' : 'desktop';
+  /* كم إجابة ما زالت على الجهاز لم يؤكّد الخادم وصولها. الرقم وحده، بلا محتوى —
+     وهو الفرق بين «لم يكمل» و«أكمل ولم تصل»، ولا يُعرف أحدهما من الآخر بلا هذا. */
+  const queued = () => { try { return Object.keys(JSON.parse(localStorage.getItem(QKEY) || '{}') || {}).length; } catch(e){ return 0; } };
   let started = VISIT.progress().done > 0, ended = false, last = 0;
   function post(event){
     const p = VISIT.progress();
@@ -562,7 +565,7 @@ const VISIT = { page: 'teacher-needs', src: () => source(), embedded: () => EMBE
       headers: { 'apikey': SYNC.key, 'Authorization': 'Bearer ' + SYNC.key, 'Content-Type': 'application/json' },
       body: JSON.stringify({ p_visit_id: vid, p_page: VISIT.page, p_event: event, p_src: VISIT.src(),
                              p_progress: p.done, p_total: p.total, p_device: DEV,
-                             p_embedded: VISIT.embedded(), p_probe: PROBE })
+                             p_embedded: VISIT.embedded(), p_probe: PROBE, p_queued: queued() })
     }).catch(e => console.warn('SHIFT: تعذّر تسجيل الزيارة —', e && e.message));
   }
   /* «فتح» مرة عند التحميل؛ و«بدء» عند أول إجابة؛ و«إكمال» حين يتمّ الكلّ؛ وما بينهما
